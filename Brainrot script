@@ -1,4 +1,13 @@
---===== STEAL A BRAINROT AUTO-GRAB + MOBILE MENU =====--
+--[[
+    🧠 BRAINROT CONTROLLER (Nameless Style)
+    Fully mobile-friendly | No keyboard required
+    Features:
+    • Auto-Grab (with Desync toggle)
+    • Speed Boost toggle + custom multiplier
+    • Jump Boost toggle + custom power
+    • Visual Ring (non-blocking, Motor6D)
+    • All controls via touch
+]]
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -6,347 +15,169 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
+
+-- Wait for character
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 local rootPart = character:WaitForChild("HumanoidRootPart")
 
--- ===== CONFIGURATION =====
-local CONFIG = {
-    -- Auto-Grab Settings
-    ENABLED = true,
-    GRAB_RANGE = 50,
-    GRAB_SPEED = 0.5,
-    
-    -- Desync Settings
-    DESYNC_ENABLED = true,
-    DESYNC_AMOUNT = 15,
-    
-    -- Booster Settings
-    SPEED_BOOST_ENABLED = false,
-    SPEED_BOOST_VALUE = 2.5,
-    JUMP_BOOST_ENABLED = false,
-    JUMP_BOOST_VALUE = 75,
-    
-    -- Visual Settings
-    SHOW_RING = true,
-    RING_COLOR = Color3.fromRGB(0, 255, 100),
-    RING_TRANSPARENCY = 0.5,
-    
-    -- Keybinds
-    TOGGLE_KEY = Enum.KeyCode.E,
-    SPEED_BOOST_KEY = Enum.KeyCode.LeftShift,
-    JUMP_BOOST_KEY = Enum.KeyCode.Space,
-    DESYNC_TOGGLE_KEY = Enum.KeyCode.R,
+-- ===== CONFIG (adjustable via GUI) =====
+local Settings = {
+    AutoGrab = true,
+    Desync = true,
+    SpeedBoost = false,
+    JumpBoost = false,
+    ShowRing = true,
+    GrabRange = 50,
+    GrabSpeed = 0.5,
+    DesyncAmount = 15,
+    SpeedMultiplier = 2.5,
+    JumpPower = 75,
 }
 
--- ===== VARIABLES =====
-local autoGrabEnabled = CONFIG.ENABLED
-local desyncEnabled = CONFIG.DESYNC_ENABLED
-local speedBoostActive = false
-local jumpBoostActive = false
-local visualRing = nil
+-- Store original stats
+local baseWalkSpeed = humanoid.WalkSpeed
+local baseJumpPower = humanoid.JumpPower
+local baseJumpHeight = humanoid.JumpHeight
+
+-- Variables
 local lastGrabTime = 0
 local grabCooldown = 0.1
-local originalWalkSpeed = 16
-local originalJumpPower = 50
+local ringPart = nil
+local ringMotor = nil
 
--- Store original values
-originalWalkSpeed = humanoid.WalkSpeed
-originalJumpPower = humanoid.JumpPower
+-- ===== CORE FUNCTIONS =====
 
--- References for UI elements
-local autoBtn, desyncBtn, ringBtn, speedToggleBtn, jumpToggleBtn
-local speedValueLabel, jumpValueLabel
-
--- ===== FUNCTIONS =====
-
--- Create visual ring around player (FIXED - won't lock body)
-local function createVisualRing()
-    if visualRing and visualRing.Parent then
-        visualRing:Destroy()
-    end
-    
-    local ring = Instance.new("Part")
-    ring.Name = "BrainrotRing"
-    ring.Shape = Enum.PartType.Cylinder
-    ring.Material = Enum.Material.Neon
-    ring.CanCollide = false
-    ring.CanQuery = false
-    ring.CanTouch = false
-    ring.Anchored = false
-    ring.CFrame = rootPart.CFrame * CFrame.Angles(math.pi/2, 0, 0)
-    ring.Size = Vector3.new(CONFIG.GRAB_RANGE * 2, 0.2, CONFIG.GRAB_RANGE * 2)
-    ring.Color = CONFIG.RING_COLOR
-    ring.Transparency = CONFIG.RING_TRANSPARENCY
-    ring.BrickColor = BrickColor.new("Lime green")
-    
-    -- Use Motor6D instead of WeldConstraint to prevent locking
-    local motor = Instance.new("Motor6D")
-    motor.Part0 = rootPart
-    motor.Part1 = ring
-    motor.C0 = CFrame.new(0, 0, 0) * CFrame.Angles(math.pi/2, 0, 0)
-    motor.C1 = CFrame.new(0, 0, 0)
-    motor.Parent = rootPart
-    
-    ring.Parent = Workspace
-    visualRing = ring
-end
-
--- Update ring position (simpler method)
-local function updateRing()
-    if visualRing and visualRing.Parent and CONFIG.SHOW_RING then
-        -- Don't update CFrame directly, let the motor handle it
-        -- Just ensure it exists
-    end
-end
-
--- Find nearest brainrot
+-- Find nearest brainrot object
 local function findNearestBrainrot()
-    local nearest = nil
-    local nearestDistance = CONFIG.GRAB_RANGE
-    
-    for _, obj in pairs(Workspace:GetDescendants()) do
-        if obj:IsA("Model") and string.lower(obj.Name):find("brainrot") then
-            local targetPart = obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart or obj:FindFirstChild("Head") or obj:FindFirstChild("Torso")
-            if targetPart then
-                local distance = (targetPart.Position - rootPart.Position).Magnitude
-                if distance < nearestDistance then
-                    nearestDistance = distance
-                    nearest = obj
-                end
-            end
-        elseif obj:IsA("Part") and string.lower(obj.Name):find("brainrot") then
-            local distance = (obj.Position - rootPart.Position).Magnitude
-            if distance < nearestDistance then
-                nearestDistance = distance
+    local nearest, nearestDist = nil, Settings.GrabRange
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and string.lower(obj.Name):find("brainrot") then
+            local dist = (obj.Position - rootPart.Position).Magnitude
+            if dist < nearestDist then
+                nearestDist = dist
                 nearest = obj
+            end
+        elseif obj:IsA("Model") then
+            local prim = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head") or obj:FindFirstChild("Torso")
+            if prim and string.lower(obj.Name):find("brainrot") then
+                local dist = (prim.Position - rootPart.Position).Magnitude
+                if dist < nearestDist then
+                    nearestDist = dist
+                    nearest = prim
+                end
             end
         end
     end
-    
     return nearest
 end
 
--- Auto-grab brainrot
-local function autoGrabBrainrot()
-    if not autoGrabEnabled then return end
+-- Apply speed boost based on toggle
+local function applySpeedBoost()
+    if Settings.SpeedBoost then
+        humanoid.WalkSpeed = baseWalkSpeed * Settings.SpeedMultiplier
+    else
+        humanoid.WalkSpeed = baseWalkSpeed
+    end
+end
+
+-- Apply jump boost based on toggle
+local function applyJumpBoost()
+    if Settings.JumpBoost then
+        humanoid.JumpPower = Settings.JumpPower
+        humanoid.JumpHeight = Settings.JumpPower / 5
+    else
+        humanoid.JumpPower = baseJumpPower
+        humanoid.JumpHeight = baseJumpHeight
+    end
+end
+
+-- Create/update the visual ring (Motor6D – no movement lock)
+local function updateRing()
+    if Settings.ShowRing then
+        if not ringPart then
+            ringPart = Instance.new("Part")
+            ringPart.Name = "BrainrotRing"
+            ringPart.Shape = Enum.PartType.Cylinder
+            ringPart.Material = Enum.Material.Neon
+            ringPart.Color = Color3.fromRGB(0, 255, 100)
+            ringPart.Transparency = 0.5
+            ringPart.Size = Vector3.new(Settings.GrabRange * 2, 0.2, Settings.GrabRange * 2)
+            ringPart.CanCollide = false
+            ringPart.CanQuery = false
+            ringPart.CanTouch = false
+            ringPart.Anchored = false
+            ringPart.Parent = Workspace
+
+            ringMotor = Instance.new("Motor6D")
+            ringMotor.Part0 = rootPart
+            ringMotor.Part1 = ringPart
+            ringMotor.C0 = CFrame.new(0, 0, 0) * CFrame.Angles(math.pi/2, 0, 0)
+            ringMotor.Parent = rootPart
+        end
+    else
+        if ringPart then ringPart:Destroy() ringPart = nil end
+        if ringMotor then ringMotor:Destroy() ringMotor = nil end
+    end
+end
+
+-- Auto-grab logic
+local function autoGrab()
+    if not Settings.AutoGrab then return end
     if tick() - lastGrabTime < grabCooldown then return end
-    
-    local target = findNearestBrainrot()
-    if not target then return end
-    
-    lastGrabTime = tick()
-    
-    local targetPart = target:FindFirstChild("HumanoidRootPart") or target.PrimaryPart or target:FindFirstChild("Head") or target:FindFirstChild("Torso")
+
+    local targetPart = findNearestBrainrot()
     if not targetPart then return end
-    
-    local targetPosition = targetPart.Position
-    
-    if desyncEnabled then
-        targetPosition = targetPosition + Vector3.new(
-            math.random(-CONFIG.DESYNC_AMOUNT, CONFIG.DESYNC_AMOUNT),
-            math.random(-CONFIG.DESYNC_AMOUNT, CONFIG.DESYNC_AMOUNT),
-            math.random(-CONFIG.DESYNC_AMOUNT, CONFIG.DESYNC_AMOUNT)
+
+    lastGrabTime = tick()
+
+    local targetPos = targetPart.Position
+    if Settings.Desync then
+        targetPos = targetPos + Vector3.new(
+            math.random(-Settings.DesyncAmount, Settings.DesyncAmount),
+            math.random(-Settings.DesyncAmount, Settings.DesyncAmount),
+            math.random(-Settings.DesyncAmount, Settings.DesyncAmount)
         )
     end
-    
-    rootPart.CFrame = rootPart.CFrame:Lerp(CFrame.new(targetPosition), CONFIG.GRAB_SPEED)
+
+    rootPart.CFrame = rootPart.CFrame:Lerp(CFrame.new(targetPos), Settings.GrabSpeed)
 end
 
--- Speed boost functions (FIXED)
-local function updateSpeed()
-    if CONFIG.SPEED_BOOST_ENABLED then
-        humanoid.WalkSpeed = originalWalkSpeed * CONFIG.SPEED_BOOST_VALUE
-        speedBoostActive = true
-        print("Speed boost ON: " .. humanoid.WalkSpeed)
-    else
-        humanoid.WalkSpeed = originalWalkSpeed
-        speedBoostActive = false
-        print("Speed boost OFF")
-    end
-end
+-- ===== RESPAWN HANDLING =====
+player.CharacterAdded:Connect(function(newChar)
+    character = newChar
+    humanoid = character:WaitForChild("Humanoid")
+    rootPart = character:WaitForChild("HumanoidRootPart")
 
-local function toggleSpeedBoost()
-    CONFIG.SPEED_BOOST_ENABLED = not CONFIG.SPEED_BOOST_ENABLED
-    updateSpeed()
-    if speedToggleBtn then
-        speedToggleBtn.Text = "⚡ Speed Boost: " .. (CONFIG.SPEED_BOOST_ENABLED and "ON" or "OFF")
-    end
-end
+    baseWalkSpeed = humanoid.WalkSpeed
+    baseJumpPower = humanoid.JumpPower
+    baseJumpHeight = humanoid.JumpHeight
 
--- Jump boost functions (FIXED)
-local function updateJump()
-    if CONFIG.JUMP_BOOST_ENABLED then
-        humanoid.JumpPower = CONFIG.JUMP_BOOST_VALUE
-        humanoid.JumpHeight = CONFIG.JUMP_BOOST_VALUE / 5  -- Adjust jump height too
-        jumpBoostActive = true
-        print("Jump boost ON: " .. humanoid.JumpPower)
-    else
-        humanoid.JumpPower = originalJumpPower
-        humanoid.JumpHeight = originalJumpPower / 5
-        jumpBoostActive = false
-        print("Jump boost OFF")
-    end
-end
+    applySpeedBoost()
+    applyJumpBoost()
 
-local function toggleJumpBoost()
-    CONFIG.JUMP_BOOST_ENABLED = not CONFIG.JUMP_BOOST_ENABLED
-    updateJump()
-    if jumpToggleBtn then
-        jumpToggleBtn.Text = "🦘 Jump Boost: " .. (CONFIG.JUMP_BOOST_ENABLED and "ON" or "OFF")
+    if ringPart then
+        ringPart:Destroy()
+        ringPart = nil
     end
-end
-
--- Update speed value (FIXED)
-local function updateSpeedValue(newValue)
-    newValue = tonumber(newValue)
-    if newValue and newValue > 0 then
-        CONFIG.SPEED_BOOST_VALUE = newValue
-        if CONFIG.SPEED_BOOST_ENABLED then
-            humanoid.WalkSpeed = originalWalkSpeed * CONFIG.SPEED_BOOST_VALUE
-        end
-        if speedValueLabel then
-            speedValueLabel.Text = "Speed Multiplier: " .. string.format("%.1f", CONFIG.SPEED_BOOST_VALUE) .. "x"
-        end
-        print("Speed multiplier set to: " .. CONFIG.SPEED_BOOST_VALUE .. "x")
+    if ringMotor then
+        ringMotor:Destroy()
+        ringMotor = nil
     end
-end
-
--- Update jump value (FIXED)
-local function updateJumpValue(newValue)
-    newValue = tonumber(newValue)
-    if newValue and newValue > 0 then
-        CONFIG.JUMP_BOOST_VALUE = newValue
-        if CONFIG.JUMP_BOOST_ENABLED then
-            humanoid.JumpPower = CONFIG.JUMP_BOOST_VALUE
-            humanoid.JumpHeight = CONFIG.JUMP_BOOST_VALUE / 5
-        end
-        if jumpValueLabel then
-            jumpValueLabel.Text = "Jump Power: " .. CONFIG.JUMP_BOOST_VALUE
-        end
-        print("Jump power set to: " .. CONFIG.JUMP_BOOST_VALUE)
-    end
-end
-
--- Toggle functions
-local function toggleAutoGrab()
-    autoGrabEnabled = not autoGrabEnabled
-    if autoBtn then
-        autoBtn.Text = "🤖 Auto-Grab: " .. (autoGrabEnabled and "ON" or "OFF")
-    end
-    print("Auto-Grab: " .. (autoGrabEnabled and "ON ✓" or "OFF ✗"))
-end
-
-local function toggleDesync()
-    desyncEnabled = not desyncEnabled
-    if desyncBtn then
-        desyncBtn.Text = "🌀 Desync: " .. (desyncEnabled and "ON" or "OFF")
-    end
-    print("Desync: " .. (desyncEnabled and "ON ✓" or "OFF ✗"))
-end
-
-local function toggleRing()
-    CONFIG.SHOW_RING = not CONFIG.SHOW_RING
-    if ringBtn then
-        ringBtn.Text = "🔮 Ring: " .. (CONFIG.SHOW_RING and "ON" or "OFF")
-    end
-    
-    if CONFIG.SHOW_RING then
-        createVisualRing()
-        print("Ring: ON ✓")
-    else
-        if visualRing then
-            -- Remove motor first
-            for _, child in pairs(rootPart:GetChildren()) do
-                if child:IsA("Motor6D") and child.Part1 == visualRing then
-                    child:Destroy()
-                end
-            end
-            visualRing:Destroy()
-            visualRing = nil
-        end
-        print("Ring: OFF ✗")
-    end
-end
-
--- ===== INPUT HANDLING =====
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    
-    if input.KeyCode == CONFIG.TOGGLE_KEY then
-        toggleAutoGrab()
-    elseif input.KeyCode == CONFIG.DESYNC_TOGGLE_KEY then
-        toggleDesync()
-    elseif input.KeyCode == CONFIG.SPEED_BOOST_KEY then
-        -- Temporary speed boost while holding
-        if not CONFIG.SPEED_BOOST_ENABLED then
-            humanoid.WalkSpeed = originalWalkSpeed * CONFIG.SPEED_BOOST_VALUE
-            speedBoostActive = true
-        end
-    elseif input.KeyCode == CONFIG.JUMP_BOOST_KEY then
-        -- Temporary jump boost
-        if not CONFIG.JUMP_BOOST_ENABLED then
-            local oldJump = humanoid.JumpPower
-            local oldHeight = humanoid.JumpHeight
-            humanoid.JumpPower = CONFIG.JUMP_BOOST_VALUE
-            humanoid.JumpHeight = CONFIG.JUMP_BOOST_VALUE / 5
-            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-            task.wait(0.2)
-            humanoid.JumpPower = oldJump
-            humanoid.JumpHeight = oldHeight
-        else
-            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-        end
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input, gameProcessed)
-    if input.KeyCode == CONFIG.SPEED_BOOST_KEY then
-        -- Reset speed when key released
-        if not CONFIG.SPEED_BOOST_ENABLED then
-            humanoid.WalkSpeed = originalWalkSpeed
-            speedBoostActive = false
-        end
+    if Settings.ShowRing then
+        task.wait(1)
+        updateRing()
     end
 end)
 
 -- ===== MAIN LOOP =====
 RunService.RenderStepped:Connect(function()
     if not character or not character.Parent then return end
-    
-    -- Only update ring if needed (minimal processing)
-    if CONFIG.SHOW_RING and visualRing and visualRing.Parent then
-        -- Ring position handled by motor, no need to update
-    end
-    
-    if autoGrabEnabled then
-        autoGrabBrainrot()
-    end
+    autoGrab()
+    -- Ring position handled by motor
 end)
 
--- Handle character respawn
-player.CharacterAdded:Connect(function(newCharacter)
-    character = newCharacter
-    humanoid = character:WaitForChild("Humanoid")
-    rootPart = character:WaitForChild("HumanoidRootPart")
-    
-    originalWalkSpeed = humanoid.WalkSpeed
-    originalJumpPower = humanoid.JumpPower
-    
-    -- Restore states
-    task.wait(0.5)
-    updateSpeed()
-    updateJump()
-    
-    if CONFIG.SHOW_RING then
-        task.wait(1)
-        createVisualRing()
-    end
-    
-    print("Script reinitialized on respawn")
-end)
-
---===== MOBILE MENU =====--
+-- ===== MOBILE GUI (Nameless Style) =====
 task.wait(1)
 
 local gui = Instance.new("ScreenGui")
@@ -354,160 +185,140 @@ gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.Parent = player:WaitForChild("PlayerGui")
 
--- Main frame
+-- Main frame – draggable, dark with green accents
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 300, 0, 500)
+frame.Size = UDim2.new(0, 320, 0, 560)  -- Slightly larger for mobile
 frame.Position = UDim2.new(0.05, 0, 0.1, 0)
-frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 frame.BorderSizePixel = 2
 frame.BorderColor3 = Color3.fromRGB(0, 255, 100)
 frame.Active = true
 frame.Draggable = true
 frame.Parent = gui
 
--- Title
+-- Title bar
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 40)
+title.Size = UDim2.new(1, 0, 0, 45)
 title.BackgroundColor3 = Color3.fromRGB(0, 40, 20)
 title.BorderSizePixel = 0
 title.Text = "🧠 BRAINROT CONTROLLER"
 title.TextColor3 = Color3.fromRGB(0, 255, 100)
 title.Font = Enum.Font.GothamBold
-title.TextSize = 18
+title.TextSize = 20
 title.Parent = frame
 
--- Create toggle button function
-local function createToggleButton(text, y, startState)
+-- Helper to create toggle buttons (big, touch-friendly)
+local yPos = 50
+local function makeToggle(text, settingKey)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -20, 0, 35)
-    btn.Position = UDim2.new(0, 10, 0, y)
-    btn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    btn.Size = UDim2.new(1, -20, 0, 45)
+    btn.Position = UDim2.new(0, 10, 0, yPos)
+    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     btn.BorderSizePixel = 1
     btn.BorderColor3 = Color3.fromRGB(0, 255, 100)
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextColor3 = Color3.fromRGB(220, 220, 220)
     btn.Font = Enum.Font.Gotham
-    btn.TextSize = 14
-    btn.Text = text .. ": " .. (startState and "ON" or "OFF")
+    btn.TextSize = 16
+    btn.Text = text .. ": " .. (Settings[settingKey] and "ON" or "OFF")
     btn.Parent = frame
-    
-    btn.MouseEnter:Connect(function()
-        btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+
+    btn.MouseEnter:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(50,50,50) end)
+    btn.MouseLeave:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(30,30,30) end)
+
+    btn.MouseButton1Click:Connect(function()
+        Settings[settingKey] = not Settings[settingKey]
+        btn.Text = text .. ": " .. (Settings[settingKey] and "ON" or "OFF")
+        if settingKey == "SpeedBoost" then applySpeedBoost()
+        elseif settingKey == "JumpBoost" then applyJumpBoost()
+        elseif settingKey == "ShowRing" then updateRing() end
+        print(text, Settings[settingKey])
     end)
-    btn.MouseLeave:Connect(function()
-        btn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-    end)
-    
     return btn
 end
 
--- Create value control function (FIXED)
-local function createValueControl(name, y, value, callback, suffix)
+autoBtn = makeToggle("🤖 Auto-Grab", "AutoGrab"); yPos = yPos + 50
+desyncBtn = makeToggle("🌀 Desync", "Desync"); yPos = yPos + 50
+ringBtn = makeToggle("🔮 Ring", "ShowRing"); yPos = yPos + 50
+speedToggleBtn = makeToggle("⚡ Speed Boost", "SpeedBoost"); yPos = yPos + 50
+jumpToggleBtn = makeToggle("🦘 Jump Boost", "JumpBoost"); yPos = yPos + 50
+
+-- Helper to create value input fields
+local function makeValueInput(labelText, settingKey, suffix, minVal)
     local bg = Instance.new("Frame")
-    bg.Size = UDim2.new(1, -20, 0, 70)
-    bg.Position = UDim2.new(0, 10, 0, y)
-    bg.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    bg.Size = UDim2.new(1, -20, 0, 80)
+    bg.Position = UDim2.new(0, 10, 0, yPos)
+    bg.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
     bg.BorderSizePixel = 1
     bg.BorderColor3 = Color3.fromRGB(0, 255, 100)
     bg.Parent = frame
-    
+
     local label = Instance.new("TextLabel")
-    label.Name = "ValueLabel"
-    label.Size = UDim2.new(1, 0, 0, 25)
+    label.Size = UDim2.new(1, 0, 0, 30)
     label.BackgroundTransparency = 1
-    label.Text = name .. ": " .. value .. (suffix or "")
+    label.Text = labelText .. ": " .. Settings[settingKey] .. (suffix or "")
     label.TextColor3 = Color3.fromRGB(0, 255, 100)
     label.Font = Enum.Font.Gotham
-    label.TextSize = 14
+    label.TextSize = 16
     label.Parent = bg
-    
-    local textbox = Instance.new("TextBox")
-    textbox.Size = UDim2.new(0.7, -5, 0, 30)
-    textbox.Position = UDim2.new(0, 5, 0, 30)
-    textbox.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    textbox.BorderSizePixel = 1
-    textbox.BorderColor3 = Color3.fromRGB(0, 255, 100)
-    textbox.TextColor3 = Color3.fromRGB(255, 255, 255)
-    textbox.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
-    textbox.PlaceholderText = "Enter value..."
-    textbox.Font = Enum.Font.Gotham
-    textbox.TextSize = 14
-    textbox.ClearTextOnFocus = false
-    textbox.Parent = bg
-    
+
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(0.7, -5, 0, 35)
+    box.Position = UDim2.new(0, 5, 0, 35)
+    box.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    box.BorderSizePixel = 1
+    box.BorderColor3 = Color3.fromRGB(0, 255, 100)
+    box.TextColor3 = Color3.fromRGB(255,255,255)
+    box.PlaceholderColor3 = Color3.fromRGB(120,120,120)
+    box.PlaceholderText = "Enter number"
+    box.Font = Enum.Font.Gotham
+    box.TextSize = 16
+    box.ClearTextOnFocus = false
+    box.Parent = bg
+
     local setBtn = Instance.new("TextButton")
-    setBtn.Size = UDim2.new(0.3, -5, 0, 30)
-    setBtn.Position = UDim2.new(0.7, 0, 0, 30)
-    setBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 50)
+    setBtn.Size = UDim2.new(0.3, -5, 0, 35)
+    setBtn.Position = UDim2.new(0.7, 0, 0, 35)
+    setBtn.BackgroundColor3 = Color3.fromRGB(0,100,50)
     setBtn.BorderSizePixel = 0
     setBtn.Text = "SET"
-    setBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    setBtn.TextColor3 = Color3.fromRGB(255,255,255)
     setBtn.Font = Enum.Font.GothamBold
-    setBtn.TextSize = 14
+    setBtn.TextSize = 16
     setBtn.Parent = bg
-    
+
     setBtn.MouseButton1Click:Connect(function()
-        local newValue = tonumber(textbox.Text)
-        if newValue and newValue > 0 then
-            callback(newValue)
-            label.Text = name .. ": " .. newValue .. (suffix or "")
-            textbox.Text = ""
+        local val = tonumber(box.Text)
+        if val and (not minVal or val >= minVal) then
+            Settings[settingKey] = val
+            label.Text = labelText .. ": " .. val .. (suffix or "")
+            box.Text = ""
+            if settingKey == "SpeedMultiplier" then applySpeedBoost()
+            elseif settingKey == "JumpPower" then applyJumpBoost() end
         else
-            textbox.Text = "Invalid!"
+            box.Text = "Invalid!"
             task.wait(1)
-            textbox.Text = ""
+            box.Text = ""
         end
     end)
-    
+
     return label
 end
 
--- Create buttons (with correct y positions)
-local yPos = 45
-autoBtn = createToggleButton("🤖 Auto-Grab", yPos, autoGrabEnabled)
-yPos = yPos + 40
-desyncBtn = createToggleButton("🌀 Desync", yPos, desyncEnabled)
-yPos = yPos + 40
-ringBtn = createToggleButton("🔮 Ring", yPos, CONFIG.SHOW_RING)
-yPos = yPos + 40
-speedToggleBtn = createToggleButton("⚡ Speed Boost", yPos, CONFIG.SPEED_BOOST_ENABLED)
-yPos = yPos + 40
-jumpToggleBtn = createToggleButton("🦘 Jump Boost", yPos, CONFIG.JUMP_BOOST_ENABLED)
-yPos = yPos + 40
-
--- Create value controls
-speedValueLabel = createValueControl("Speed Multiplier", yPos, CONFIG.SPEED_BOOST_VALUE, updateSpeedValue, "x")
-yPos = yPos + 80
-jumpValueLabel = createValueControl("Jump Power", yPos, CONFIG.JUMP_BOOST_VALUE, updateJumpValue, "")
-
--- Button connections
-autoBtn.MouseButton1Click:Connect(toggleAutoGrab)
-desyncBtn.MouseButton1Click:Connect(toggleDesync)
-ringBtn.MouseButton1Click:Connect(toggleRing)
-speedToggleBtn.MouseButton1Click:Connect(toggleSpeedBoost)
-jumpToggleBtn.MouseButton1Click:Connect(toggleJumpBoost)
+yPos = yPos + 10
+speedValLabel = makeValueInput("Speed Multiplier", "SpeedMultiplier", "x", 0.1)
+yPos = yPos + 90
+jumpValLabel = makeValueInput("Jump Power", "JumpPower", "", 1)
 
 -- Initialize
-if CONFIG.SHOW_RING then
+if Settings.ShowRing then
     task.wait(0.5)
-    createVisualRing()
+    updateRing()
 end
+applySpeedBoost()
+applyJumpBoost()
 
--- Test the speed/jump values immediately
-print("Current speed boost enabled: " .. tostring(CONFIG.SPEED_BOOST_ENABLED))
-print("Current jump boost enabled: " .. tostring(CONFIG.JUMP_BOOST_ENABLED))
-
-print("════════════════════════════════════")
-print("🧠 STEAL A BRAINROT - ULTIMATE FIX ✓")
-print("════════════════════════════════════")
-print("✅ FIXED ISSUES:")
-print("  • Ring no longer locks your body")
-print("  • Speed changer works now")
-print("  • Jump changer works now")
-print("  • All toggles work properly")
-print("════════════════════════════════════")
-print("📝 HOW TO USE")
-print("  • Click buttons to toggle features")
-print("  • Enter numbers in textboxes, click SET")
-print("  • Hold Shift for temporary speed")
-print("  • Press Space for jump boost")
-print("════════════════════════════════════")
+print("===== BRAINROT CONTROLLER READY =====")
+print("✅ All toggles work via touch")
+print("✅ Speed/Jump changers work")
+print("✅ Ring does not lock movement")
+print("📱 Mobile optimized")
