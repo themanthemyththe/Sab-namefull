@@ -12,7 +12,6 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 
@@ -257,12 +256,14 @@ content.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
 content.BorderSizePixel = 0
 content.ScrollBarThickness = 4
 content.ScrollBarImageColor3 = Color3.fromRGB(0, 255, 100)
-content.CanvasSize = UDim2.new(0, 0, 0, 0) -- updated later
 content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+content.CanvasSize = UDim2.new(0, 0, 0, 0)
 content.Parent = frame
 
 local padding = Instance.new("UIPadding")
 padding.PaddingTop = UDim.new(0, 10)
+padding.PaddingLeft = UDim.new(0, 10)
+padding.PaddingRight = UDim.new(0, 10)
 padding.PaddingBottom = UDim.new(0, 10)
 padding.Parent = content
 
@@ -270,7 +271,7 @@ padding.Parent = content
 
 local function createToggle(text, settingKey)
     local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, -20, 0, 45)
+    container.Size = UDim2.new(1, 0, 0, 45)
     container.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
     container.BorderSizePixel = 0
     container.Parent = content
@@ -319,7 +320,7 @@ end
 
 local function createInput(labelText, settingKey, suffix, minVal)
     local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, -20, 0, 70)
+    container.Size = UDim2.new(1, 0, 0, 70)
     container.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
     container.BorderSizePixel = 0
     container.Parent = content
@@ -387,20 +388,20 @@ local function createInput(labelText, settingKey, suffix, minVal)
     end)
 end
 
--- Create toggles
+-- Create all toggles
 createToggle("Auto-Grab", "AutoGrab")
 createToggle("Desync Mode", "Desync")
 createToggle("Visual Ring", "ShowRing")
 createToggle("Speed Boost", "SpeedBoost")
 createToggle("Jump Boost", "JumpBoost")
 
--- Spacer
+-- Add a small spacer
 local spacer = Instance.new("Frame")
-spacer.Size = UDim2.new(1, -20, 0, 10)
+spacer.Size = UDim2.new(1, 0, 0, 10)
 spacer.BackgroundTransparency = 1
 spacer.Parent = content
 
--- Inputs
+-- Create inputs
 createInput("Speed Multiplier", "SpeedMultiplier", "x", 0.1)
 createInput("Jump Power", "JumpPower", "", 1)
 
@@ -409,6 +410,7 @@ if Settings.ShowRing then task.wait(0.5); updateRing() end
 applySpeedBoost(); applyJumpBoost()
 
 print("=== BRAINROT HACK (NAMELESS STYLE) LOADED ===")
+print("✅ All toggles and inputs visible")
 print("✅ Toggle switches (green = ON, red = OFF)")
 print("✅ Value inputs with SET button")
 print("✅ Ring does not freeze you")
