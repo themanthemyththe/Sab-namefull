@@ -1,0 +1,322 @@
+--===== STEAL A BRAINROT AUTO-GRAB + MOBILE MENU =====--
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local rootPart = character:WaitForChild("HumanoidRootPart")
+
+-- ===== CONFIGURATION =====
+local CONFIG = {
+    -- Auto-Grab Settings
+    ENABLED = true,
+    GRAB_RANGE = 50,
+    GRAB_SPEED = 0.5,
+    
+    -- Desync Settings
+    DESYNC_ENABLED = true,
+    DESYNC_AMOUNT = 15,
+    
+    -- Booster Settings
+    SPEED_BOOST = 1.5,
+    JUMP_POWER = 50,
+    
+    -- Visual Settings
+    SHOW_RING = true,
+    RING_COLOR = Color3.fromRGB(0, 255, 100),
+    RING_TRANSPARENCY = 0.5,
+    
+    -- Keybinds
+    TOGGLE_KEY = Enum.KeyCode.E,
+    SPEED_BOOST_KEY = Enum.KeyCode.LeftShift,
+    JUMP_BOOST_KEY = Enum.KeyCode.Space,
+}
+
+-- ===== VARIABLES =====
+local autoGrabEnabled = CONFIG.ENABLED
+local speedBoostActive = false
+local visualRing = nil
+local lastGrabTime = 0
+local grabCooldown = 0.1
+
+-- ===== FUNCTIONS =====
+
+-- Create visual ring around player
+local function createVisualRing()
+    if visualRing then visualRing:Destroy() end
+    
+    local ring = Instance.new("Part")
+    ring.Shape = Enum.PartType.Cylinder
+    ring.Material = Enum.Material.Neon
+    ring.CanCollide = false
+    ring.CFrame = rootPart.CFrame * CFrame.Angles(0, 0, math.rad(90))
+    ring.Size = Vector3.new(1, CONFIG.GRAB_RANGE * 2, CONFIG.GRAB_RANGE * 2)
+    ring.Color = CONFIG.RING_COLOR
+    ring.Transparency = CONFIG.RING_TRANSPARENCY
+    ring.TopSurface = Enum.SurfaceType.Smooth
+    ring.BottomSurface = Enum.SurfaceType.Smooth
+    
+    local weld = Instance.new("WeldConstraint")
+    weld.Part0 = rootPart
+    weld.Part1 = ring
+    weld.Parent = ring
+    
+    ring.Parent = workspace
+    visualRing = ring
+end
+
+-- Update ring position
+local function updateRing()
+    if visualRing and CONFIG.SHOW_RING then
+        visualRing.CFrame = rootPart.CFrame * CFrame.Angles(0, 0, math.rad(90))
+    end
+end
+
+-- Find nearest brainrot
+local function findNearestBrainrot()
+    local nearest = nil
+    local nearestDistance = CONFIG.GRAB_RANGE
+    
+    for _, obj in pairs(workspace:GetChildren()) do
+        if obj:IsA("Model") and obj.Name:lower():find("brainrot") then
+            local targetPart = obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart or obj:FindFirstChild("Head")
+            if targetPart then
+                local distance = (targetPart.Position - rootPart.Position).Magnitude
+                if distance < nearestDistance then
+                    nearestDistance = distance
+                    nearest = obj
+                end
+            end
+        elseif obj:IsA("Part") and obj.Name:lower():find("brainrot") then
+            local distance = (obj.Position - rootPart.Position).Magnitude
+            if distance < nearestDistance then
+                nearestDistance = distance
+                nearest = obj
+            end
+        end
+    end
+    
+    return nearest
+end
+
+-- Auto-grab brainrot
+local function autoGrabBrainrot()
+    if not autoGrabEnabled or tick() - lastGrabTime < grabCooldown then return end
+    
+    local target = findNearestBrainrot()
+    if not target then return end
+    
+    lastGrabTime = tick()
+    
+    local targetPart = target:FindFirstChild("HumanoidRootPart") or target.PrimaryPart or target:FindFirstChild("Head")
+    if not targetPart then return end
+    
+    local targetPosition = targetPart.Position
+    
+    -- Apply desync if enabled
+    if CONFIG.DESYNC_ENABLED then
+        targetPosition = targetPosition + Vector3.new(
+            math.random(-CONFIG.DESYNC_AMOUNT, CONFIG.DESYNC_AMOUNT),
+            math.random(-CONFIG.DESYNC_AMOUNT, CONFIG.DESYNC_AMOUNT),
+            math.random(-CONFIG.DESYNC_AMOUNT, CONFIG.DESYNC_AMOUNT)
+        )
+    end
+    
+    rootPart.CFrame = rootPart.CFrame:Lerp(CFrame.new(targetPosition), CONFIG.GRAB_SPEED)
+end
+
+-- Speed boost
+local function activateSpeedBoost()
+    if speedBoostActive then return end
+    speedBoostActive = true
+    humanoid.WalkSpeed = 16 * CONFIG.SPEED_BOOST
+    speedBtn.Text = "Speed Boost (ON)"
+    print("✓ Speed Boost ACTIVATED")
+end
+
+local function deactivateSpeedBoost()
+    if not speedBoostActive then return end
+    speedBoostActive = false
+    humanoid.WalkSpeed = 16
+    speedBtn.Text = "Speed Boost"
+    print("✗ Speed Boost DEACTIVATED")
+end
+
+-- Jump boost
+local function jumpBoost()
+    if humanoid:GetState() == Enum.HumanoidStateType.Landed then
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        rootPart.AssemblyLinearVelocity = rootPart.AssemblyLinearVelocity + Vector3.new(0, CONFIG.JUMP_POWER, 0)
+        print("↑ Jump Boost!")
+    end
+end
+
+-- Toggle auto-grab
+local function toggleAutoGrab()
+    autoGrabEnabled = not autoGrabEnabled
+    autoBtn.Text = "Auto-Grab: " .. (autoGrabEnabled and "ON" or "OFF")
+    print("Auto-Grab: " .. (autoGrabEnabled and "ON" or "OFF"))
+end
+
+-- Toggle ring
+local function toggleRing()
+    CONFIG.SHOW_RING = not CONFIG.SHOW_RING
+    ringBtn.Text = "Toggle Ring (" .. (CONFIG.SHOW_RING and "ON" or "OFF") .. ")"
+    if CONFIG.SHOW_RING then
+        createVisualRing()
+    elseif visualRing then
+        visualRing:Destroy()
+        visualRing = nil
+    end
+end
+
+-- ===== INPUT HANDLING =====
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if input.KeyCode == CONFIG.TOGGLE_KEY then
+        toggleAutoGrab()
+    elseif input.KeyCode == CONFIG.SPEED_BOOST_KEY then
+        activateSpeedBoost()
+    elseif input.KeyCode == CONFIG.JUMP_BOOST_KEY then
+        jumpBoost()
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+    if input.KeyCode == CONFIG.SPEED_BOOST_KEY then
+        deactivateSpeedBoost()
+    end
+end)
+
+-- ===== MAIN LOOP =====
+RunService.RenderStepped:Connect(function()
+    if not character.Parent then return end
+    
+    if CONFIG.SHOW_RING then
+        updateRing()
+    end
+    
+    if autoGrabEnabled then
+        autoGrabBrainrot()
+    end
+end)
+
+-- Handle character respawn
+player.CharacterAdded:Connect(function(newCharacter)
+    character = newCharacter
+    humanoid = character:WaitForChild("Humanoid")
+    rootPart = character:WaitForChild("HumanoidRootPart")
+    
+    print("Script reinitialized on respawn")
+    
+    if CONFIG.SHOW_RING then
+        createVisualRing()
+    end
+end)
+
+--===== MOBILE MENU =====--
+wait(1) -- Small delay to ensure character is loaded
+
+local gui = Instance.new("ScreenGui")
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.Parent = player:WaitForChild("PlayerGui")
+
+-- Main frame
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 230, 0, 260)
+frame.Position = UDim2.new(0.05, 0, 0.25, 0)
+frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+frame.BorderSizePixel = 2
+frame.BorderColor3 = Color3.fromRGB(60, 60, 60)
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
+
+-- Title bar
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 36)
+title.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+title.BorderSizePixel = 0
+title.Text = "SAB Controller"
+title.TextColor3 = Color3.fromRGB(200, 200, 200)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.Parent = frame
+
+-- Button creator
+local function makeButton(text, y)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -20, 0, 38)
+    btn.Position = UDim2.new(0, 10, 0, y)
+    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    btn.BorderSizePixel = 1
+    btn.BorderColor3 = Color3.fromRGB(70, 70, 70)
+    btn.TextColor3 = Color3.fromRGB(220, 220, 220)
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 15
+    btn.Text = text
+    btn.AutoButtonColor = false
+    btn.Parent = frame
+
+    btn.MouseEnter:Connect(function()
+        btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    end)
+
+    btn.MouseLeave:Connect(function()
+        btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    end)
+
+    return btn
+end
+
+-- Buttons
+local autoBtn = makeButton("Auto-Grab: " .. (autoGrabEnabled and "ON" or "OFF"), 45)
+local speedBtn = makeButton("Speed Boost", 90)
+local jumpBtn = makeButton("Jump Boost", 135)
+local ringBtn = makeButton("Toggle Ring (" .. (CONFIG.SHOW_RING and "ON" or "OFF") .. ")", 180)
+
+-- Button connections
+autoBtn.MouseButton1Click:Connect(function()
+    toggleAutoGrab()
+end)
+
+speedBtn.MouseButton1Click:Connect(function()
+    if speedBoostActive then
+        deactivateSpeedBoost()
+    else
+        activateSpeedBoost()
+    end
+end)
+
+jumpBtn.MouseButton1Click:Connect(function()
+    jumpBoost()
+end)
+
+ringBtn.MouseButton1Click:Connect(function()
+    toggleRing()
+end)
+
+-- ===== INITIALIZATION =====
+if CONFIG.SHOW_RING then
+    createVisualRing()
+end
+
+print("════════════════════════════════════")
+print("Steal a Brainrot Auto-Grab LOADED ✓")
+print("════════════════════════════════════")
+print("CONTROLS:")
+print("  E - Toggle Auto-Grab")
+print("  Hold Shift - Speed Boost")
+print("  Space - Jump Boost")
+print("  Mobile Menu - Touch controls available")
+print("════════════════════════════════════")
+print("CURRENT SETTINGS:")
+print("  Range: " .. CONFIG.GRAB_RANGE .. " studs")
+print("  Speed: " .. CONFIG.SPEED_BOOST .. "x")
+print("  Desync: " .. (CONFIG.DESYNC_ENABLED and "ON ✓" or "OFF"))
+print("════════════════════════════════════")
