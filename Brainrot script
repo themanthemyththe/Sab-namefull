@@ -1,18 +1,18 @@
 --[[
-    🧠 BRAINROT CONTROLLER (Nameless Style)
-    Fully mobile-friendly | No keyboard required
+    🧠 BRAINROT HACK (Nameless Admin Style)
+    Fully mobile-optimized | Touch-friendly toggles
     Features:
-    • Auto-Grab (with Desync toggle)
-    • Speed Boost toggle + custom multiplier
-    • Jump Boost toggle + custom power
-    • Visual Ring (non-blocking, Motor6D)
-    • All controls via touch
+    • Auto-Grab (with Desync)
+    • Speed Boost (toggle + multiplier)
+    • Jump Boost (toggle + power)
+    • Visual Ring (non-blocking)
 ]]
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 
@@ -21,7 +21,7 @@ local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 local rootPart = character:WaitForChild("HumanoidRootPart")
 
--- ===== CONFIG (adjustable via GUI) =====
+-- ===== SETTINGS =====
 local Settings = {
     AutoGrab = true,
     Desync = true,
@@ -40,7 +40,7 @@ local baseWalkSpeed = humanoid.WalkSpeed
 local baseJumpPower = humanoid.JumpPower
 local baseJumpHeight = humanoid.JumpHeight
 
--- Variables
+-- Runtime vars
 local lastGrabTime = 0
 local grabCooldown = 0.1
 local ringPart = nil
@@ -48,40 +48,27 @@ local ringMotor = nil
 
 -- ===== CORE FUNCTIONS =====
 
--- Find nearest brainrot object
 local function findNearestBrainrot()
     local nearest, nearestDist = nil, Settings.GrabRange
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj:IsA("BasePart") and string.lower(obj.Name):find("brainrot") then
             local dist = (obj.Position - rootPart.Position).Magnitude
-            if dist < nearestDist then
-                nearestDist = dist
-                nearest = obj
-            end
+            if dist < nearestDist then nearestDist = dist; nearest = obj end
         elseif obj:IsA("Model") then
             local prim = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head") or obj:FindFirstChild("Torso")
             if prim and string.lower(obj.Name):find("brainrot") then
                 local dist = (prim.Position - rootPart.Position).Magnitude
-                if dist < nearestDist then
-                    nearestDist = dist
-                    nearest = prim
-                end
+                if dist < nearestDist then nearestDist = dist; nearest = prim end
             end
         end
     end
     return nearest
 end
 
--- Apply speed boost based on toggle
 local function applySpeedBoost()
-    if Settings.SpeedBoost then
-        humanoid.WalkSpeed = baseWalkSpeed * Settings.SpeedMultiplier
-    else
-        humanoid.WalkSpeed = baseWalkSpeed
-    end
+    humanoid.WalkSpeed = Settings.SpeedBoost and (baseWalkSpeed * Settings.SpeedMultiplier) or baseWalkSpeed
 end
 
--- Apply jump boost based on toggle
 local function applyJumpBoost()
     if Settings.JumpBoost then
         humanoid.JumpPower = Settings.JumpPower
@@ -92,7 +79,6 @@ local function applyJumpBoost()
     end
 end
 
--- Create/update the visual ring (Motor6D – no movement lock)
 local function updateRing()
     if Settings.ShowRing then
         if not ringPart then
@@ -103,34 +89,27 @@ local function updateRing()
             ringPart.Color = Color3.fromRGB(0, 255, 100)
             ringPart.Transparency = 0.5
             ringPart.Size = Vector3.new(Settings.GrabRange * 2, 0.2, Settings.GrabRange * 2)
-            ringPart.CanCollide = false
-            ringPart.CanQuery = false
-            ringPart.CanTouch = false
+            ringPart.CanCollide = false; ringPart.CanQuery = false; ringPart.CanTouch = false
             ringPart.Anchored = false
             ringPart.Parent = Workspace
 
             ringMotor = Instance.new("Motor6D")
-            ringMotor.Part0 = rootPart
-            ringMotor.Part1 = ringPart
-            ringMotor.C0 = CFrame.new(0, 0, 0) * CFrame.Angles(math.pi/2, 0, 0)
+            ringMotor.Part0 = rootPart; ringMotor.Part1 = ringPart
+            ringMotor.C0 = CFrame.new(0,0,0) * CFrame.Angles(math.pi/2,0,0)
             ringMotor.Parent = rootPart
         end
     else
-        if ringPart then ringPart:Destroy() ringPart = nil end
-        if ringMotor then ringMotor:Destroy() ringMotor = nil end
+        if ringPart then ringPart:Destroy(); ringPart = nil end
+        if ringMotor then ringMotor:Destroy(); ringMotor = nil end
     end
 end
 
--- Auto-grab logic
 local function autoGrab()
     if not Settings.AutoGrab then return end
     if tick() - lastGrabTime < grabCooldown then return end
-
     local targetPart = findNearestBrainrot()
     if not targetPart then return end
-
     lastGrabTime = tick()
-
     local targetPos = targetPart.Position
     if Settings.Desync then
         targetPos = targetPos + Vector3.new(
@@ -139,45 +118,59 @@ local function autoGrab()
             math.random(-Settings.DesyncAmount, Settings.DesyncAmount)
         )
     end
-
     rootPart.CFrame = rootPart.CFrame:Lerp(CFrame.new(targetPos), Settings.GrabSpeed)
 end
 
--- ===== RESPAWN HANDLING =====
+-- Respawn handling
 player.CharacterAdded:Connect(function(newChar)
     character = newChar
     humanoid = character:WaitForChild("Humanoid")
     rootPart = character:WaitForChild("HumanoidRootPart")
-
     baseWalkSpeed = humanoid.WalkSpeed
     baseJumpPower = humanoid.JumpPower
     baseJumpHeight = humanoid.JumpHeight
-
-    applySpeedBoost()
-    applyJumpBoost()
-
-    if ringPart then
-        ringPart:Destroy()
-        ringPart = nil
-    end
-    if ringMotor then
-        ringMotor:Destroy()
-        ringMotor = nil
-    end
-    if Settings.ShowRing then
-        task.wait(1)
-        updateRing()
-    end
+    applySpeedBoost(); applyJumpBoost()
+    if ringPart then ringPart:Destroy(); ringPart = nil end
+    if ringMotor then ringMotor:Destroy(); ringMotor = nil end
+    if Settings.ShowRing then task.wait(1); updateRing() end
 end)
 
--- ===== MAIN LOOP =====
+-- Main loop
 RunService.RenderStepped:Connect(function()
-    if not character or not character.Parent then return end
-    autoGrab()
-    -- Ring position handled by motor
+    if character and character.Parent then autoGrab() end
 end)
 
--- ===== MOBILE GUI (Nameless Style) =====
+-- Optional keybinds (still work but not needed on mobile)
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.E then
+        Settings.AutoGrab = not Settings.AutoGrab
+        if autoBtn then autoBtn.Text = "🤖 AUTO-GRAB " .. (Settings.AutoGrab and "ON" or "OFF") end
+    elseif input.KeyCode == Enum.KeyCode.R then
+        Settings.Desync = not Settings.Desync
+        if desyncBtn then desyncBtn.Text = "🌀 DESYNC " .. (Settings.Desync and "ON" or "OFF") end
+    elseif input.KeyCode == Enum.KeyCode.LeftShift then
+        if not Settings.SpeedBoost then humanoid.WalkSpeed = baseWalkSpeed * Settings.SpeedMultiplier end
+    elseif input.KeyCode == Enum.KeyCode.Space then
+        if Settings.JumpBoost then
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        else
+            local oldP, oldH = humanoid.JumpPower, humanoid.JumpHeight
+            humanoid.JumpPower = Settings.JumpPower
+            humanoid.JumpHeight = Settings.JumpPower / 5
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            task.wait(0.2)
+            humanoid.JumpPower, humanoid.JumpHeight = oldP, oldH
+        end
+    end
+end)
+UserInputService.InputEnded:Connect(function(input, gp)
+    if input.KeyCode == Enum.KeyCode.LeftShift and not Settings.SpeedBoost then
+        humanoid.WalkSpeed = baseWalkSpeed
+    end
+end)
+
+-- ===== NAMELESS-STYLE GUI =====
 task.wait(1)
 
 local gui = Instance.new("ScreenGui")
@@ -185,106 +178,198 @@ gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.Parent = player:WaitForChild("PlayerGui")
 
--- Main frame – draggable, dark with green accents
+-- Main frame – rounded corners, shadow, dark gradient
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 320, 0, 560)  -- Slightly larger for mobile
+frame.Size = UDim2.new(0, 340, 0, 580)
 frame.Position = UDim2.new(0.05, 0, 0.1, 0)
-frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-frame.BorderSizePixel = 2
-frame.BorderColor3 = Color3.fromRGB(0, 255, 100)
+frame.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+frame.BorderSizePixel = 0
+frame.ClipsDescendants = true
 frame.Active = true
 frame.Draggable = true
 frame.Parent = gui
 
--- Title bar
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 45)
-title.BackgroundColor3 = Color3.fromRGB(0, 40, 20)
-title.BorderSizePixel = 0
-title.Text = "🧠 BRAINROT CONTROLLER"
-title.TextColor3 = Color3.fromRGB(0, 255, 100)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 20
-title.Parent = frame
+-- Rounded corners
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = frame
 
--- Helper to create toggle buttons (big, touch-friendly)
-local yPos = 50
-local function makeToggle(text, settingKey)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -20, 0, 45)
-    btn.Position = UDim2.new(0, 10, 0, yPos)
-    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    btn.BorderSizePixel = 1
-    btn.BorderColor3 = Color3.fromRGB(0, 255, 100)
-    btn.TextColor3 = Color3.fromRGB(220, 220, 220)
-    btn.Font = Enum.Font.Gotham
-    btn.TextSize = 16
-    btn.Text = text .. ": " .. (Settings[settingKey] and "ON" or "OFF")
-    btn.Parent = frame
+-- Drop shadow
+local shadow = Instance.new("ImageLabel")
+shadow.Size = UDim2.new(1, 20, 1, 20)
+shadow.Position = UDim2.new(0, -10, 0, -10)
+shadow.BackgroundTransparency = 1
+shadow.Image = "rbxassetid://6015897843"
+shadow.ImageColor3 = Color3.new(0, 0, 0)
+shadow.ImageTransparency = 0.5
+shadow.ScaleType = Enum.ScaleType.Slice
+shadow.SliceCenter = Rect.new(10, 10, 118, 118)
+shadow.Parent = frame
 
-    btn.MouseEnter:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(50,50,50) end)
-    btn.MouseLeave:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(30,30,30) end)
+-- Title bar with gradient
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 45)
+titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+titleBar.BorderSizePixel = 0
+titleBar.Parent = frame
 
-    btn.MouseButton1Click:Connect(function()
+local titleGradient = Instance.new("UIGradient")
+titleGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 170, 0)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 100, 0))
+})
+titleGradient.Parent = titleBar
+
+local titleText = Instance.new("TextLabel")
+titleText.Size = UDim2.new(1, -20, 1, 0)
+titleText.Position = UDim2.new(0, 10, 0, 0)
+titleText.BackgroundTransparency = 1
+titleText.Text = "🧠 BRAINROT HACK"
+titleText.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleText.Font = Enum.Font.GothamBold
+titleText.TextSize = 20
+titleText.TextXAlignment = Enum.TextXAlignment.Left
+titleText.Parent = titleBar
+
+-- Close button (X)
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 35, 0, 35)
+closeBtn.Position = UDim2.new(1, -40, 0, 5)
+closeBtn.BackgroundColor3 = Color3.fromRGB(60, 0, 0)
+closeBtn.BorderSizePixel = 0
+closeBtn.Text = "✕"
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 18
+closeBtn.Parent = titleBar
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 6)
+closeCorner.Parent = closeBtn
+
+closeBtn.MouseButton1Click:Connect(function() gui:Destroy() end)
+
+-- Content frame (scrollable)
+local content = Instance.new("ScrollingFrame")
+content.Size = UDim2.new(1, 0, 1, -45)
+content.Position = UDim2.new(0, 0, 0, 45)
+content.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+content.BorderSizePixel = 0
+content.ScrollBarThickness = 4
+content.ScrollBarImageColor3 = Color3.fromRGB(0, 255, 100)
+content.CanvasSize = UDim2.new(0, 0, 0, 0) -- updated later
+content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+content.Parent = frame
+
+local padding = Instance.new("UIPadding")
+padding.PaddingTop = UDim.new(0, 10)
+padding.PaddingBottom = UDim.new(0, 10)
+padding.Parent = content
+
+-- ===== UI ELEMENTS (Nameless Style) =====
+
+local function createToggle(text, settingKey)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, -20, 0, 45)
+    container.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    container.BorderSizePixel = 0
+    container.Parent = content
+
+    local contCorner = Instance.new("UICorner")
+    contCorner.CornerRadius = UDim.new(0, 6)
+    contCorner.Parent = container
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.7, -10, 1, 0)
+    label.Position = UDim2.new(0, 10, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = Color3.fromRGB(220, 220, 220)
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 16
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = container
+
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.new(0, 60, 0, 30)
+    toggleBtn.Position = UDim2.new(1, -70, 0.5, -15)
+    toggleBtn.BackgroundColor3 = Settings[settingKey] and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(80, 0, 0)
+    toggleBtn.BorderSizePixel = 0
+    toggleBtn.Text = Settings[settingKey] and "ON" or "OFF"
+    toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.TextSize = 14
+    toggleBtn.Parent = container
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 4)
+    btnCorner.Parent = toggleBtn
+
+    toggleBtn.MouseButton1Click:Connect(function()
         Settings[settingKey] = not Settings[settingKey]
-        btn.Text = text .. ": " .. (Settings[settingKey] and "ON" or "OFF")
+        toggleBtn.BackgroundColor3 = Settings[settingKey] and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(80, 0, 0)
+        toggleBtn.Text = Settings[settingKey] and "ON" or "OFF"
         if settingKey == "SpeedBoost" then applySpeedBoost()
         elseif settingKey == "JumpBoost" then applyJumpBoost()
         elseif settingKey == "ShowRing" then updateRing() end
-        print(text, Settings[settingKey])
     end)
-    return btn
+
+    return toggleBtn
 end
 
-autoBtn = makeToggle("🤖 Auto-Grab", "AutoGrab"); yPos = yPos + 50
-desyncBtn = makeToggle("🌀 Desync", "Desync"); yPos = yPos + 50
-ringBtn = makeToggle("🔮 Ring", "ShowRing"); yPos = yPos + 50
-speedToggleBtn = makeToggle("⚡ Speed Boost", "SpeedBoost"); yPos = yPos + 50
-jumpToggleBtn = makeToggle("🦘 Jump Boost", "JumpBoost"); yPos = yPos + 50
+local function createInput(labelText, settingKey, suffix, minVal)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, -20, 0, 70)
+    container.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    container.BorderSizePixel = 0
+    container.Parent = content
 
--- Helper to create value input fields
-local function makeValueInput(labelText, settingKey, suffix, minVal)
-    local bg = Instance.new("Frame")
-    bg.Size = UDim2.new(1, -20, 0, 80)
-    bg.Position = UDim2.new(0, 10, 0, yPos)
-    bg.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    bg.BorderSizePixel = 1
-    bg.BorderColor3 = Color3.fromRGB(0, 255, 100)
-    bg.Parent = frame
+    local contCorner = Instance.new("UICorner")
+    contCorner.CornerRadius = UDim.new(0, 6)
+    contCorner.Parent = container
 
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, 0, 0, 30)
+    label.Size = UDim2.new(1, -10, 0, 25)
+    label.Position = UDim2.new(0, 10, 0, 5)
     label.BackgroundTransparency = 1
     label.Text = labelText .. ": " .. Settings[settingKey] .. (suffix or "")
     label.TextColor3 = Color3.fromRGB(0, 255, 100)
     label.Font = Enum.Font.Gotham
-    label.TextSize = 16
-    label.Parent = bg
+    label.TextSize = 15
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = container
 
     local box = Instance.new("TextBox")
-    box.Size = UDim2.new(0.7, -5, 0, 35)
-    box.Position = UDim2.new(0, 5, 0, 35)
+    box.Size = UDim2.new(0.7, -10, 0, 35)
+    box.Position = UDim2.new(0, 10, 0, 30)
     box.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    box.BorderSizePixel = 1
-    box.BorderColor3 = Color3.fromRGB(0, 255, 100)
+    box.BorderSizePixel = 0
     box.TextColor3 = Color3.fromRGB(255,255,255)
     box.PlaceholderColor3 = Color3.fromRGB(120,120,120)
-    box.PlaceholderText = "Enter number"
+    box.PlaceholderText = "Enter value"
     box.Font = Enum.Font.Gotham
-    box.TextSize = 16
+    box.TextSize = 15
     box.ClearTextOnFocus = false
-    box.Parent = bg
+    box.Parent = container
+
+    local boxCorner = Instance.new("UICorner")
+    boxCorner.CornerRadius = UDim.new(0, 4)
+    boxCorner.Parent = box
 
     local setBtn = Instance.new("TextButton")
     setBtn.Size = UDim2.new(0.3, -5, 0, 35)
-    setBtn.Position = UDim2.new(0.7, 0, 0, 35)
-    setBtn.BackgroundColor3 = Color3.fromRGB(0,100,50)
+    setBtn.Position = UDim2.new(0.7, 0, 0, 30)
+    setBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 50)
     setBtn.BorderSizePixel = 0
     setBtn.Text = "SET"
     setBtn.TextColor3 = Color3.fromRGB(255,255,255)
     setBtn.Font = Enum.Font.GothamBold
-    setBtn.TextSize = 16
-    setBtn.Parent = bg
+    setBtn.TextSize = 15
+    setBtn.Parent = container
+
+    local setCorner = Instance.new("UICorner")
+    setCorner.CornerRadius = UDim.new(0, 4)
+    setCorner.Parent = setBtn
 
     setBtn.MouseButton1Click:Connect(function()
         local val = tonumber(box.Text)
@@ -300,25 +385,31 @@ local function makeValueInput(labelText, settingKey, suffix, minVal)
             box.Text = ""
         end
     end)
-
-    return label
 end
 
-yPos = yPos + 10
-speedValLabel = makeValueInput("Speed Multiplier", "SpeedMultiplier", "x", 0.1)
-yPos = yPos + 90
-jumpValLabel = makeValueInput("Jump Power", "JumpPower", "", 1)
+-- Create toggles
+createToggle("Auto-Grab", "AutoGrab")
+createToggle("Desync Mode", "Desync")
+createToggle("Visual Ring", "ShowRing")
+createToggle("Speed Boost", "SpeedBoost")
+createToggle("Jump Boost", "JumpBoost")
+
+-- Spacer
+local spacer = Instance.new("Frame")
+spacer.Size = UDim2.new(1, -20, 0, 10)
+spacer.BackgroundTransparency = 1
+spacer.Parent = content
+
+-- Inputs
+createInput("Speed Multiplier", "SpeedMultiplier", "x", 0.1)
+createInput("Jump Power", "JumpPower", "", 1)
 
 -- Initialize
-if Settings.ShowRing then
-    task.wait(0.5)
-    updateRing()
-end
-applySpeedBoost()
-applyJumpBoost()
+if Settings.ShowRing then task.wait(0.5); updateRing() end
+applySpeedBoost(); applyJumpBoost()
 
-print("===== BRAINROT CONTROLLER READY =====")
-print("✅ All toggles work via touch")
-print("✅ Speed/Jump changers work")
-print("✅ Ring does not lock movement")
-print("📱 Mobile optimized")
+print("=== BRAINROT HACK (NAMELESS STYLE) LOADED ===")
+print("✅ Toggle switches (green = ON, red = OFF)")
+print("✅ Value inputs with SET button")
+print("✅ Ring does not freeze you")
+print("📱 Fully mobile-friendly")
